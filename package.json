@@ -1,0 +1,17 @@
+{
+  "name": "digital-fireworks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "2.5号玉の花火を組み合わせて『夜空の1シーン』をデザインし、そのまま打ち上げシミュレーションできるスタンドアロンWebアプリ",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "preview": "node server.mjs --port 4173"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
