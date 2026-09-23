@@ -2,6 +2,9 @@
 
 **直径6cmの2.5号玉「型物（かたもの）」を設計して、そのまま打ち上げるシミュレーター。**
 
+▶ **そのまま遊べます: https://sekisuihouse.github.io/digital-fireworks/**
+（インストール不要。PC・タブレット・スマホのブラウザで動きます）
+
 このアプリで作るのは「絵」ではなく、**実際に作れる花火玉そのもの**です。
 
 ```
@@ -59,6 +62,9 @@ cd digital-fireworks
 ---
 
 ## 起動方法
+
+> ブラウザで試すだけなら https://sekisuihouse.github.io/digital-fireworks/ を開くだけです。
+> 以下はローカル（会場PC・オフライン）で動かす場合の手順です。
 
 ```bash
 npm run dev
