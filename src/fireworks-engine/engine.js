@@ -1,18 +1,19 @@
 /**
  * digital-fireworks 専用 花火エンジン
  * =========================================================================
- * 「2.5号玉（型物）の中に詰めた星の配置が、そのまま空に開く」ことを再現する。
+ * 「2.5号玉の割物（わりもの）型花火」— 玉の中に詰めた星の配置が、そのまま空に開く。
  *
- * これは型物（かたもの）であって、ポカ物ではない。
- *   型物 : 割薬で星を球状に一気に押し出し、玉の中の並びを拡大した「形」を空に描く。
- *          星はその位置で燃え、形がしばらく保たれる。
- *   ポカ物: 玉が二つに割れて中身をばらまく（星が垂れ落ちる）。今回は作らない。
+ * これは割物の型物であって、ポカ物ではない。
+ *   割物 : 強い割薬で玉を内側から一気に割り、星を中心から放射状に勢いよく押し出す。
+ *          星は光の尾（引き）を曳いて飛び、玉の中の並びを拡大した位置で燃えて「形」になる。
+ *   ポカ物: 弱い割薬で玉が二つに割れ、中身がふわっと散る・垂れる。今回は作らない。
  *
  * そのため
- *   ・星は素早く所定の位置まで開いて、そこで止まる（空気抵抗を強めに）
- *   ・形が崩れないよう重力は弱め
- *   ・星ひとつが「ひとつの光点」として見える（火花を狭い範囲に固める）
- * という設定にしてある。計算そのものは実物と同じ理屈:
+ *   ・割薬の閃光と「ドン」を強く、星は中心から一斉に・同じ速さで飛び出す
+ *   ・星は飛ぶ間に尾を曳く → 中心から形へ向かう放射状の線が見える（割物らしさ）
+ *   ・所定の位置で減速して止まり、形のまましばらく燃える（重力は弱め）
+ *   ・最後は全部の星がほぼ同時に消える（消え口を揃える）
+ * 計算そのものは実物と同じ理屈:
  *
  *   珠の位置 (x,y)[cm]  ──(2.5cm → 開花半径)──>  火花の初速ベクトル
  *
@@ -43,14 +44,22 @@ const SUB_STEP = 1 / 30;
  * 2.5号玉の開花直径はおよそ 50m なので、画面の約半分の高さに相当させている。
  */
 export const BURST_RADIUS = 0.34;
-/** 星 1 個あたりの火花数（品質で増減する） */
-const PARTICLES_PER_PELLET = 30;
+/** 星 1 個のまわりに添える小さな火の粒の数（品質で増減する） */
+const PARTICLES_PER_PELLET = 10;
 /**
  * 星 1 個が空で広がる大きさ（開花半径に対する割合）。
  * 星どうしの間隔（1cm / 2.5cm = 0.4）より十分小さくして、
  * 1 個の星が 1 個の光点として分かれて見えるようにする。
  */
-const PELLET_SPREAD = 0.06;
+const PELLET_SPREAD = 0.03;
+/**
+ * 割物の星が受ける空気抵抗の倍率（DRAG × これ）。
+ * 1 未満にして飛ぶ時間を少し長くし、尾（引き）が中心から伸びていくのを見せる。
+ * 実効の時定数 ≒ 0.42 秒。
+ */
+const STAR_DRAG_MUL = 0.8;
+/** 星が燃えている時間（秒）。ばらつきを小さくして消え口を揃える */
+const STAR_LIFE = 2.3;
 
 const TAU = Math.PI * 2;
 
@@ -272,7 +281,7 @@ export class FireworksEngine {
       this._launchShot(this.pending.shift().shot);
     }
     this._updateShells(dt);
-    this.particles.update(dt, this._trailEmitter);
+    this.particles.update(dt, this._trailEmitter, this._tailEmitter);
     this._updateFlashes(dt);
   }
 
@@ -372,15 +381,31 @@ export class FireworksEngine {
     });
   };
 
+  /** 割物の星が飛びながら曳く尾（引き）。その場に残って短く燃える */
+  _tailEmitter = (x, y, ci, speed) => {
+    const ps = this.particles;
+    if (ps.freeSlots < 300) return;
+    // 速いうち（開いた直後）ほど明るく長い尾になる
+    const k = Math.min(1, speed / (BURST_RADIUS * DRAG * STAR_DRAG_MUL));
+    ps.spawn(x, y, (Math.random() - 0.5) * 0.01, (Math.random() - 0.5) * 0.01, {
+      life: 0.16 + 0.34 * k + Math.random() * 0.12,
+      size: 1.0 + 0.9 * k,
+      ci,
+      bright: 0.35 + 0.5 * k,
+      twinkle: 0.25,
+      gmul: 0.35,
+      dmul: 2.0,
+    });
+  };
+
   /* --------------------------------------------------------------- 開花 */
 
   /**
-   * 玉の中の星の配置を、そのまま空へ拡大して開かせる（型物の開き方）。
+   * 割物の開き方で、玉の中の星の配置をそのまま空へ拡大して開かせる。
    *   星の中心 (x,y)[cm] / 2.5cm  ->  -1..1 の方向ベクトル
-   *   その方向へ「開花半径 R」ぶん飛ぶ初速 v0 = R × DRAG を与える
-   * 空気抵抗 DRAG により最終的な到達距離がちょうど R になり、
-   * 0.3 秒ほどで開ききって止まるため、玉の中の並びが R 倍に拡大された
-   * 「形」として空にしばらく残る。
+   *   その方向へ「開花半径 R」ぶん飛ぶ初速 v0 = R × 実効DRAG を与える
+   * 強い割薬で全部の星が同時に・同じ速さで押し出され、尾を曳きながら R まで飛んで止まる。
+   * 玉の中の並びが R 倍に拡大された「形」として空に残り、最後に揃って消える。
    */
   _burst(rising) {
     const ps = this.particles;
@@ -389,14 +414,14 @@ export class FireworksEngine {
     const pellets = shell?.pellets || [];
 
     const R = BURST_RADIUS;
-    const v0 = R * DRAG;
+    const starDrag = DRAG * STAR_DRAG_MUL;
+    const v0 = R * starDrag;
     const cmToUnit = 1 / MAX_PELLET_CENTER_R_CM; // 2.5cm -> 1.0
+    // 1 発の中で消えるタイミングを揃える（星ごとのばらつきはごく小さく）
+    const life = STAR_LIFE + rand() * 0.2;
 
-    // 珠が多いほど 1 個あたりの火花を減らして総数を一定に保つ
-    const budget = Math.max(200, ps.freeSlots - 900);
-    let per = Math.round(PARTICLES_PER_PELLET * this.quality);
-    if (pellets.length) per = Math.min(per, Math.floor(budget / pellets.length));
-    per = Math.max(6, per);
+    let per = Math.max(3, Math.round(PARTICLES_PER_PELLET * this.quality));
+    if (pellets.length) per = Math.min(per, Math.floor(Math.max(120, ps.freeSlots - 6000) / pellets.length));
 
     for (const pel of pellets) {
       const color = getPelletColor(pel.color);
@@ -404,64 +429,71 @@ export class FireworksEngine {
       const dirX = pel.x * cmToUnit;
       const dirY = pel.y * cmToUnit;
       const glow = color.glow ?? 1;
+      const core = colorIndex(palette[0]);
+      const light = colorIndex(palette[Math.min(2, palette.length - 1)]);
 
+      // 星本体: 尾（引き）を曳いて飛ぶ明るい芯
+      ps.spawn(rising.x, rising.y, dirX * v0, dirY * v0, {
+        life: life + rand() * 0.05,
+        size: 3.6,
+        ci: core,
+        bright: 1.35 * glow,
+        twinkle: color.twinkle * 0.5,
+        gmul: 0.8,
+        dmul: STAR_DRAG_MUL,
+        tail: true,
+        hold: true,
+      });
+      // 芯のまわりの白っぽい光（星の輪郭をくっきりさせる）
+      ps.spawn(rising.x, rising.y, dirX * v0, dirY * v0, {
+        life: life + rand() * 0.05,
+        size: 2.4,
+        ci: light,
+        bright: 1.0 * glow,
+        twinkle: color.twinkle,
+        gmul: 0.8,
+        dmul: STAR_DRAG_MUL,
+        hold: true,
+      });
+
+      // 星の燃えかす: 芯にぴったり寄り添う小さな火の粒（星に厚みを出す）
       for (let i = 0; i < per; i++) {
-        // 星は「ひとかたまり」なので、ばらけ幅は星の間隔よりずっと小さくする
         const a = rand() * TAU;
         const rr = Math.sqrt(rand()) * PELLET_SPREAD;
-        const jx = Math.cos(a) * rr;
-        const jy = Math.sin(a) * rr;
-
-        // 手前／奥の粒を作って球らしい奥行きを出す
-        const depth = 0.72 + 0.28 * rand();
-        // 速度をそろえるほど形がそろう（型物は星が一斉に同じ距離まで開く）
-        const speed = v0 * (0.97 + rand() * 0.07);
-        const accent = rand() < 0.14;
-
-        ps.spawn(rising.x, rising.y, (dirX + jx) * speed, (dirY + jy) * speed, {
-          // 開いた形が読み取れるよう、星はしばらく燃え続ける
-          life: 2.3 + rand() * 0.9,
-          size: (accent ? 2.5 : 1.75) * depth * (0.85 + rand() * 0.35),
-          ci: colorIndex(
-            palette[Math.min(palette.length - 1, (Math.pow(rand(), 2.2) * palette.length) | 0)]
-          ),
-          bright: glow * (accent ? 1.15 : 0.88) * depth,
-          twinkle: color.twinkle + (accent ? 0.12 : 0),
-          gmul: 1,
-          dmul: 1,
-        });
-      }
-
-      // 星そのものの光（どこに星があるかがはっきり分かるように）
-      for (let c = 0; c < 2; c++) {
-        ps.spawn(rising.x, rising.y, dirX * v0, dirY * v0, {
-          life: 2.6 + rand() * 0.7,
-          size: c === 0 ? 4.0 : 2.6,
-          ci: colorIndex(palette[c === 0 ? 0 : 1 % palette.length]),
-          bright: c === 0 ? 1.4 : 1.05,
-          twinkle: color.twinkle * 0.6,
-          gmul: 1,
-          dmul: 1,
-        });
+        const speed = v0 * (0.985 + rand() * 0.03);
+        ps.spawn(
+          rising.x,
+          rising.y,
+          (dirX + Math.cos(a) * rr) * speed,
+          (dirY + Math.sin(a) * rr) * speed,
+          {
+            life: life * (0.9 + rand() * 0.1),
+            size: 1.6 + rand() * 1.0,
+            ci: colorIndex(palette[(rand() * palette.length) | 0]),
+            bright: 1.0 * glow,
+            twinkle: color.twinkle + 0.1,
+            gmul: 0.8,
+            dmul: STAR_DRAG_MUL,
+            hold: true,
+          }
+        );
       }
     }
 
-    // 割薬の光（開いた瞬間だけ中心で光る。すぐ消して形の邪魔をしない）
+    // 割薬の閃光: 強い割薬で玉が割れる瞬間の、白く速い火花（すぐ消えて形の邪魔をしない）
     if (ps.freeSlots > 400) {
-      const n = Math.round(26 * this.quality);
+      const n = Math.round(60 * this.quality);
       for (let i = 0; i < n; i++) {
-        const u = rand() * 2 - 1;
         const th = rand() * TAU;
-        const s = Math.sqrt(1 - u * u);
-        const sp = R * 0.34 * DRAG * (0.4 + rand() * 0.8);
-        ps.spawn(rising.x, rising.y, s * Math.cos(th) * sp, s * Math.sin(th) * sp, {
-          life: 0.24 + rand() * 0.26,
-          size: 1.2 + rand() * 0.6,
-          ci: rand() < 0.5 ? WHITE : EMBER_HOT,
-          bright: 0.55,
-          twinkle: 0.35,
-          gmul: 0.9,
-          dmul: 1.6,
+        const sp = R * 0.55 * DRAG * (0.6 + rand() * 0.6);
+        ps.spawn(rising.x, rising.y, Math.cos(th) * sp, Math.sin(th) * sp, {
+          life: 0.14 + rand() * 0.14,
+          size: 1.4 + rand() * 0.8,
+          ci: rand() < 0.6 ? WHITE : EMBER_HOT,
+          bright: 0.9,
+          twinkle: 0.2,
+          gmul: 0.4,
+          dmul: 1.4,
         });
       }
     }
@@ -469,12 +501,12 @@ export class FireworksEngine {
     this.flashes.push({
       x: rising.x,
       y: rising.y,
-      r: R * 0.8,
+      r: R * 1.1,
       t: 0,
-      dur: 0.22,
+      dur: 0.3,
     });
 
-    playBurst(1, pellets.length > 12, 0.75);
+    playBurst(1.15, pellets.length > 12, 0.9);
   }
 
   _updateFlashes(dt) {
@@ -513,8 +545,8 @@ export class FireworksEngine {
       const cy = oy + f.y * unit;
       const r = f.r * unit * (0.35 + p * 0.9);
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      g.addColorStop(0, `rgba(255,252,240,${(a * 0.42).toFixed(3)})`);
-      g.addColorStop(0.3, `rgba(255,240,205,${(a * 0.1).toFixed(3)})`);
+      g.addColorStop(0, `rgba(255,252,240,${(a * 0.7).toFixed(3)})`);
+      g.addColorStop(0.3, `rgba(255,240,205,${(a * 0.18).toFixed(3)})`);
       g.addColorStop(1, 'rgba(255,230,180,0)');
       ctx.fillStyle = g;
       ctx.beginPath();

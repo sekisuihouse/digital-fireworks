@@ -23,6 +23,9 @@ export const GRAVITY = 0.1;
  */
 export const DRAG = 3.0;
 
+/** 引き（尾）の粒を置く間隔（ステージ高さ基準） */
+const TAIL_STEP = 0.0055;
+
 const ALPHA_BUCKETS = 6;
 const SIZE_BUCKETS = 4;
 const SIZE_LW = [0.9, 1.5, 2.3, 3.4]; // 基準太さ（ステージ高さ1000pxのとき）
@@ -92,7 +95,8 @@ export class ParticleSystem {
     this.gmul[i] = o.gmul ?? 1;
     this.dmul[i] = o.dmul ?? 1;
     this.ci[i] = o.ci;
-    this.flags[i] = o.trail ? 1 : 0;
+    // bit0: 錦の火の粉 / bit1: 割物の引き（尾） / bit2: 消え口を揃える
+    this.flags[i] = (o.trail ? 1 : 0) | (o.tail ? 2 : 0) | (o.hold ? 4 : 0);
     return i;
   }
 
@@ -123,8 +127,9 @@ export class ParticleSystem {
    * 物理更新
    * @param {number} dt 秒
    * @param {(x:number,y:number,ci:number)=>void} [onTrail] 錦の火の粉を出す
+   * @param {(x:number,y:number,ci:number,size:number)=>void} [onTail] 割物の引き（尾）を出す
    */
-  update(dt, onTrail) {
+  update(dt, onTrail, onTail) {
     const { x, y, px, py, vx, vy, age, life, gmul, dmul, flags, ci } = this;
     const gdt = GRAVITY * dt;
     for (let i = 0; i < this.count; i++) {
@@ -148,9 +153,21 @@ export class ParticleSystem {
         i--;
         continue;
       }
+      const fl = flags[i];
       // 錦: 落ちながら火の粉をこぼす
-      if (flags[i] === 1 && onTrail && Math.random() < dt * 14) {
+      if (fl & 1 && onTrail && Math.random() < dt * 14) {
         onTrail(x[i], y[i], ci[i]);
+      }
+      // 割物の引き: 飛んでいる間、通った道に光を置いていく（速いほど密に）
+      if (fl & 2 && onTail) {
+        const dist = Math.hypot(x[i] - px[i], y[i] - py[i]);
+        if (dist > 0.0015) {
+          const n = Math.min(5, Math.ceil(dist / TAIL_STEP));
+          for (let k = 0; k < n; k++) {
+            const f = (k + Math.random()) / n;
+            onTail(px[i] + (x[i] - px[i]) * f, py[i] + (y[i] - py[i]) * f, ci[i], dist / dt);
+          }
+        }
       }
     }
   }
@@ -158,7 +175,8 @@ export class ParticleSystem {
   /** いま生きている粒の明るさ（0..1） */
   _alpha(i) {
     const t = this.age[i] / this.life[i];
-    let a = Math.pow(1 - t, 1.15);
+    // 割物の星は燃えている間は明るさを保ち、最後に一斉に消える（消え口を揃える）
+    let a = this.flags[i] & 4 ? (t < 0.82 ? 1 - t * 0.25 : ((1 - t) / 0.18) * 0.8) : Math.pow(1 - t, 1.15);
     // 生まれた瞬間の強い光
     a *= 1 + 0.4 * Math.exp(-this.age[i] * 11);
     const tw = this.twinkle[i];
