@@ -95,7 +95,16 @@ python3 -m http.server 5180
 ```
 
 **起動後はネット接続不要です。** 設計・試し打ち・保存・再生・ギャラリーはすべてオフラインで動きます。
-外部 API・CDN・Web フォント・画像ファイルへの依存はありません（アイコンはインライン SVG、効果音は WebAudio の合成音）。
+外部 API・CDN・外部 Web フォント・画像ファイルへの依存はありません（アイコンはインライン SVG、効果音は WebAudio の合成音）。
+
+### デザインシステム
+
+見た目は **まるごと祭2026｜DESIGN SYSTEM｜DESIGN GUIDLINE v0.1.0**（[Figma](https://www.figma.com/community/file/1652927350109066330)）に合わせています。トークンは `src/styles/main.css` の `:root` にあります。
+
+- 色: `Main/Green-2 #2f8a4a`（地）・`プライマリー/White #F9F8F5`（紙・文字）。花火を見せる玉とプレイヤーだけは夜空のまま暗くしています
+- 書体: 和文 A P-SK IshiiGothic StdN B ／ 欧文・数字 Poppins Medium ／ 見出し A P-OTF KuretakeMeiseki StdN B
+  - Poppins Medium は `public/fonts/` に同梱（SIL OFL 1.1、`public/fonts/OFL.txt`）
+  - IshiiGothic・KuretakeMeiseki は Morisawa の書体なので同梱していません。会場 PC にインストールされていれば使われ、無ければヒラギノ／游ゴシックで表示されます
 
 ---
 

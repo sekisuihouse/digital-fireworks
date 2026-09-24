@@ -12,7 +12,7 @@ export const UI_ICONS = {
   play: svg(`<path d="M8 5.4v13.2L19 12 8 5.4Z" fill="currentColor"/>`),
   rocket: svg(`
     <path d="M12 2.6c3.4 2.2 5.2 5.6 5.2 9.3l1.9 2.6-3.1.8-1.3 3.1-2.7-1.9-2.7 1.9-1.3-3.1-3.1-.8 1.9-2.6c0-3.7 1.8-7.1 5.2-9.3Z" fill="currentColor"/>
-    <circle cx="12" cy="10" r="1.9" fill="#0b1224"/>`),
+    <circle cx="12" cy="10" r="1.9" style="fill: var(--strong-bg)"/>`),
   save: svg(`
     <path d="M5 4h11l3 3v13H5V4Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
     <path d="M8.5 4v5h7V4M8 13.5h8V20H8v-6.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>`),
